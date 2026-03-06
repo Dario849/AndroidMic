@@ -3,150 +3,164 @@ import { StyleSheet, Text, View, TouchableOpacity, PermissionsAndroid, TextInput
 import LiveAudioStream from 'react-native-live-audio-stream';
 import TcpSocket from 'react-native-tcp-socket';
 import { Buffer } from 'buffer';
-//react-native-background-fetch Used for keeping the app alive in the background to continue streaming audio data to the server even when the app is closed or the device is locked.
-import BackgroundFetch from 'react-native-background-fetch';
 import StatusIndicator from './components/StatusIndicator.js';
 import VolumeBar from './components/VolumeSlider.js';
+import { startBackgroundService, stopBackgroundService } from './components/BackgroundActions.js';
+
 global.Buffer = Buffer;
 
-
 const App = () => {
-  //Prepare background fetch to keep the app alive in the background to continue streaming audio data to the server even when the app is closed or the device is locked.
-  useEffect(() => {
-    BackgroundFetch.configure(
-      {
-        minimumFetchInterval: 15, // Fetch interval in minutes
-        stopOnTerminate: false, // Continue running after app termination
-        startOnBoot: true, // Start on device boot
-        enableHeadless: true, // Enable headless mode
-      },
-      async (taskId) => {
-        console.log('[BackgroundFetch] Task executed: ', taskId);
-        // Perform any background work here, such as keeping the audio stream alive
-        BackgroundFetch.finish(taskId);
-      },
-      (error) => {
-        console.error('[BackgroundFetch] Failed to configure: ', error);
-      }
-    );
-    return () => {
-      BackgroundFetch.stop();
-    };
-  }, []);
   const [status, setStatus] = useState(false);
   const [client, setClient] = useState(null);
   const [volume, setVolume] = useState(0);
-  const [config, setConfig] = useState({ ip: '127.0.0.1', port: '8082' });
+  const [config, setConfig] = useState({ ip: '0.0.0.0', port: '8082' });
   const [showSettings, setShowSettings] = useState(false);
-  // 1. Request Permissions
-  const requestPermission = async () => {
-    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
-  };
 
+  // 1. Initial Permissions & Setup
   useEffect(() => {
-    requestPermission();
+    const setup = async () => {
+      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
 
-    // Start headless task to keep the app alive in the background
-    // This allows the app to continue streaming audio data to the server even when the app is closed or the device is locked.
-    // Note: The actual implementation of the headless task is in index.js and MyTaskService.java
-    // 2. Audio Configuration
+    };
+    setup();
+
+    // Setup Audio Options
     const options = {
       sampleRate: 44100,
       channels: 1,
       bitsPerSample: 16,
-      audioSource: 6, // Voice Recognition source (cleaner)
+      audioSource: 6,
       bufferSize: 4096,
     };
-
     LiveAudioStream.init(options);
 
-    // 3. Handle data chunks from Mic + calculate volume based on data volume (peak)
+    // Cleanup on unmount
+    return () => {
+      LiveAudioStream.stop();
+      stopBackgroundService(); // Kill service if app is fully closed
+    };
+  }, []);
 
+  // 2. The Streaming Logic
+  // This listener survives in background BECAUSE 'startBackgroundService' keeps the bridge alive.
+  useEffect(() => {
     LiveAudioStream.on('data', data => {
       if (client) {
         const buffer = Buffer.from(data, 'base64');
 
+        // Calculate Volume Visuals
         let peak = 0;
         for (let i = 0; i < buffer.length; i += 2) {
           const sample = Math.abs(buffer.readInt16LE(i));
           if (sample > peak) peak = sample;
         }
         const normalizedVolume = Math.min(1000, (peak / 32767) * 1000);
-
         setVolume(normalizedVolume);
-        client.write(buffer);
+
+        // WRITE TO SOCKET
+        try {
+          client.write(buffer);
+        } catch (e) {
+          console.error("Write Error", e);
+        }
       }
     });
 
     return () => {
-      LiveAudioStream.stop();
-      if (client) client.destroy();
+      // Clean listener creates duplicates if not removed, though library handles it usually.
     };
   }, [client]);
 
-  // 4. Connection Logic
-  const toggleConnection = () => {
+  // 3. Master Toggle
+  const toggleConnection = async () => {
     if (client) {
+      // STOPPING
       LiveAudioStream.stop();
       client.destroy();
       setClient(null);
       setStatus(false);
       setVolume(0);
+      await stopBackgroundService(); // Allow phone to sleep
     } else {
-      const newClient = TcpSocket.createConnection({ port: parseInt(config.port), host: config.ip }, () => {
+      // STARTING
+      // A. Start the Service FIRST to ensure we have a background context
+      await startBackgroundService();
+
+      // B. Connect Socket
+      const newClient = TcpSocket.createConnection({
+        port: parseInt(config.port),
+        host: config.ip,
+        localAddress: "0.0.0.0"
+      }, () => {
         setStatus(true);
+        // C. Start Mic only after connection
         LiveAudioStream.start();
       });
 
-      newClient.on('error', (err) => console.error('Socket Error: ', err));
+      newClient.on('error', (err) => {
+        console.error('Socket Error: ', err);
+        stopBackgroundService(); // Safety cleanup
+        setStatus(false);
+      });
+
+      newClient.on('close', () => {
+        console.log('Connection Closed');
+        setStatus(false);
+        stopBackgroundService();
+      });
+
       setClient(newClient);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Android Mic to PC</Text>
-      <Text style={{ color: 'green' }}>Volumen</Text>
-      <VolumeBar volume={volume} />
-      <TouchableOpacity onPress={() => setShowSettings(!showSettings)}><Text style={styles.toggleSettings}>Configuraciones</Text></TouchableOpacity>
-      {showSettings && (
-        <View>
+      <Text style={styles.title}>Android Mic Streamer</Text>
 
-          <Text style={{ color: 'gray' }}>Dirección IP</Text>
+      <VolumeBar volume={volume} />
+
+      <StatusIndicator connected={status} clientStatus={client} />
+
+      <TouchableOpacity style={styles.button} onPress={toggleConnection}>
+        <Text style={{ color: 'white', fontWeight: 'bold' }}>
+          {client ? 'STOP STREAM' : 'START SERVICE & STREAM'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => setShowSettings(!showSettings)} style={{ marginTop: 20 }}>
+        <Text style={styles.toggleSettings}>Settings</Text>
+      </TouchableOpacity>
+
+      {showSettings && (
+        <View style={styles.settingsArea}>
+          <Text>IP Address</Text>
           <TextInput
             style={styles.input}
             onChangeText={(text) => setConfig({ ...config, ip: text })}
             value={config.ip}
-            placeholder="Dirección IP"
+            placeholder="192.168.1.X"
           />
-          <Text style={{ color: 'gray' }}>Puerto</Text>
+          <Text>Port</Text>
           <TextInput
             style={styles.input}
             keyboardType="numeric"
             onChangeText={(text) => setConfig({ ...config, port: text.replace(/[^0-9]/g, '') })}
             value={config.port}
-            placeholder="PUERTO"
           />
-
         </View>
       )}
-
-
-      <StatusIndicator connected={status} clientStatus={client} />
-      <TouchableOpacity style={styles.button} onPress={toggleConnection}>
-        <Text style={{ color: 'white' }}>{client ? 'STOP' : 'START STREAM'}</Text>
-      </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FCFF' },
-  title: { fontSize: 20, marginBottom: 20 },
-  status: { fontWeight: 'bold', color: 'blue', marginBottom: 20 },
-  button: { backgroundColor: '#2196F3', padding: 20, borderRadius: 10 },
-  input: { height: 40, borderColor: 'gray', borderWidth: 1, marginBottom: 20, paddingHorizontal: 10 },
-  toggleSettings: { backgroundColor: '#173ad4', padding: 10, borderRadius: 8 }
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FCFF', padding: 20 },
+  title: { fontSize: 24, marginBottom: 30, fontWeight: 'bold' },
+  button: { backgroundColor: '#2196F3', paddingHorizontal: 40, paddingVertical: 20, borderRadius: 10, elevation: 5 },
+  input: { height: 40, borderColor: 'gray', borderWidth: 1, marginBottom: 10, width: 200, paddingHorizontal: 10, borderRadius: 5 },
+  toggleSettings: { color: 'gray', textDecorationLine: 'underline' },
+  settingsArea: { marginTop: 20, padding: 20, backgroundColor: '#eee', borderRadius: 10 }
 });
 
 export default App;
