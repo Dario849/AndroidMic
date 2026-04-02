@@ -2,12 +2,15 @@
   "name": "AndroidMicApp",
   "version": "0.0.1",
   "private": true,
+  "packageManager": "pnpm@10.17.1",
   "scripts": {
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "deps:check-lockfiles": "node -e \"const fs=require('fs');const bad=['package-lock.json','yarn.lock'];const found=bad.filter(f=>fs.existsSync(f));if(found.length){console.error('Remove non-pnpm lockfiles: '+found.join(', '));process.exit(1)}console.log('Lockfile policy OK');\"",
+    "deps:audit": "pnpm audit --prod"
   },
   "dependencies": {
     "@notifee/react-native": "^9.1.8",
@@ -17,6 +20,7 @@
     "react-native": "0.84.1",
     "react-native-background-actions": "^4.0.1",
     "react-native-background-fetch": "^4.3.0",
+    "react-native-keychain": "^10.0.0",
     "react-native-live-audio-stream": "^1.1.1",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-tcp-socket": "^6.4.1"
@@ -43,5 +47,10 @@
   },
   "engines": {
     "node": ">= 22.11.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-xml-parser": ">=5.5.7"
+    }
   }
 }

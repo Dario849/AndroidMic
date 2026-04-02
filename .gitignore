@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 main.exe
+
+# JS lockfile policy
+AndroidMicApp/package-lock.json
+AndroidMicApp/yarn.lock

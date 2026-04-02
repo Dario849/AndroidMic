@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { React, useEffect, useState } from 'react';
+import * as Keychain from 'react-native-keychain';
 import { StyleSheet, Text, View, TouchableOpacity, PermissionsAndroid, TextInput } from 'react-native';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import TcpSocket from 'react-native-tcp-socket';
@@ -24,6 +25,14 @@ const App = () => {
 
     };
     setup();
+
+    // Load saved config if exists
+    (async () => {
+      const credentials = await Keychain.getGenericPassword({ service: 'micStreamerConfig' });
+      if (credentials) {
+        setConfig(JSON.parse(credentials.password));
+      }
+    })();
 
     // Setup Audio Options
     const options = {
@@ -92,12 +101,14 @@ const App = () => {
         port: parseInt(config.port),
         host: config.ip,
         localAddress: "0.0.0.0"
-      }, () => {
+      }, async () => {
         setStatus(true);
         // C. Start Mic only after connection
         LiveAudioStream.start();
+        // D. Save client applied settings (host & port) for future session on app close or restart (Persistent settings)
+        // Should config data be saved on successful connection or on every toggle? Im leaving it like this for now.
+        await Keychain.setGenericPassword('config', JSON.stringify(config), { service: 'micStreamerConfig' });
       });
-
       newClient.on('error', (err) => {
         console.error('Socket Error: ', err);
         stopBackgroundService(); // Safety cleanup
