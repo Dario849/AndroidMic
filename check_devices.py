@@ -1,4 +1,12 @@
-import sounddevice as sd
+import sys
+
+try:
+    import sounddevice as sd
+except ModuleNotFoundError:
+    print("[ERROR] Python module 'sounddevice' is not available.")
+    print("Use the bundled check_devices.exe for end-user environments.")
+    print("Developer fallback: activate .venv and run 'python check_devices.py'.")
+    sys.exit(1)
 
 devices = sd.query_devices()
 print("--- OUTPUT DEVICES DETECTED ---")

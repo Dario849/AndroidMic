@@ -9,6 +9,8 @@ const ROOT_DIR = path.resolve(APP_DIR, "..");
 const ANDROID_DIR = path.join(APP_DIR, "android");
 const GRADLEW_BAT_PATH = path.join(ANDROID_DIR, "gradlew.bat");
 const APP_PACKAGE = "com.androidmicapp";
+const CHECK_DEVICES_EXE_PATH = path.join(ROOT_DIR, "dist", "check_devices.exe");
+const RECEIVER_EXE_PATH = path.join(ROOT_DIR, "dist", "main.exe");
 const RELEASE_APK_PATH = path.join(
   ANDROID_DIR,
   "app",
@@ -88,16 +90,41 @@ function ensureGradleWrapperExists() {
   }
 }
 
+
+function listAudioOutputDevices() {
+  if (!fs.existsSync(CHECK_DEVICES_EXE_PATH)) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: `Audio device checker not found at ${CHECK_DEVICES_EXE_PATH}.`,
+    };
+  }
+
+  return runCommand(CHECK_DEVICES_EXE_PATH, [], { cwd: ROOT_DIR, stdio: "inherit" });
+}
+
+function getReceiverRuntime() {
+  if (fs.existsSync(RECEIVER_EXE_PATH)) {
+    return {
+      command: RECEIVER_EXE_PATH,
+      usesPython: false,
+    };
+  }
+
+  return {
+    command: "python",
+    usesPython: true,
+  };
+}
+
 async function ensureVbAudioInstalled(rl) {
   console.log("Listing available audio output devices...\n");
-  const result = runCommand("python", [path.join(ROOT_DIR, "check_devices.py")], {
-    cwd: ROOT_DIR,
-    stdio: "inherit",
-  });
+  const result = listAudioOutputDevices();
 
   if (result.status !== 0) {
-    console.log("\nWarning: Unable to list devices with check_devices.py.");
-    console.log("Install Python dependencies with: uv sync");
+    console.log("\nWarning: Unable to list devices automatically.");
+    console.log(result.stderr || "Unknown audio device listing error.");
+    console.log(`Build it with: pyinstaller --onefile check_devices.py --distpath dist`);
   }
 
   console.log(
@@ -277,12 +304,10 @@ async function promptDeviceId(rl) {
 
     if (answer.toLowerCase() === "list") {
       console.log("\nListing available output devices...\n");
-      const result = runCommand("python", [path.join(ROOT_DIR, "check_devices.py")], {
-        cwd: ROOT_DIR,
-        stdio: "inherit",
-      });
+      const result = listAudioOutputDevices();
       if (result.status !== 0) {
-        console.log("Unable to list audio devices with python check_devices.py.");
+        console.log("Unable to list audio devices automatically.");
+        console.log(result.stderr || "Unknown audio device listing error.");
       }
       continue;
     }
@@ -298,7 +323,6 @@ async function promptDeviceId(rl) {
 
 async function main() {
   ensureWindows();
-  ensureMainScriptExists();
   ensureGradleWrapperExists();
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -306,7 +330,13 @@ async function main() {
   try {
     printStep("Validating environment");
     ensureBinary("adb", "ADB", DOWNLOADS.adb);
-    ensureBinary("python", "Python", DOWNLOADS.python);
+
+    const receiverRuntime = getReceiverRuntime();
+    if (receiverRuntime.usesPython) {
+      ensureBinary("python", "Python", DOWNLOADS.python);
+      ensureMainScriptExists();
+    }
+
     await ensureVbAudioInstalled(rl);
 
     printStep("Prepare Android device");
@@ -363,13 +393,17 @@ async function main() {
       fail("adb reverse failed. Keep the device connected and try again.");
     }
 
-    printStep("Start Python audio receiver");
+    printStep("Start desktop audio receiver");
+    const runtimeMode = receiverRuntime.usesPython
+      ? "Python runtime"
+      : "bundled executable";
+    console.log(`Starting desktop receiver using ${runtimeMode}.`);
     console.log("The service will stay attached to this terminal until you stop it.");
     console.log("Verify audio in your recording software with: CABLE Output (VB-Audio Virtual Cable)");
     console.log("Stop the service with Ctrl+C.\n");
 
-    const pythonArgs = [
-      path.join(ROOT_DIR, "main.py"),
+    const receiverArgs = [
+      ...(receiverRuntime.usesPython ? [path.join(ROOT_DIR, "main.py")] : []),
       "--port",
       String(port),
       "--device_id",
@@ -380,7 +414,11 @@ async function main() {
       String(DEFAULT_CHANNELS),
     ];
 
-    const serviceExitCode = await runAttachedProcess("python", pythonArgs, ROOT_DIR);
+    const serviceExitCode = await runAttachedProcess(
+      receiverRuntime.command,
+      receiverArgs,
+      ROOT_DIR,
+    );
     process.exitCode = serviceExitCode;
   } finally {
     rl.close();

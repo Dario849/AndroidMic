@@ -31,6 +31,13 @@ pnpm run android
 5. For USB, keep host `127.0.0.1` and port `8082`.
 6. For Wi-Fi, use the Windows PC IPv4 address and the same port configured in the desktop receiver.
 
+The setup script now prefers bundled executables for end-user environments:
+
+1. `check_devices.exe` for listing output devices (no `.venv` required)
+2. `androidmic-service.exe` for running the desktop receiver (no `.venv` required)
+
+If those executables are missing, the script falls back to Python runtime for developer machines.
+
 The mobile UI mirrors those instructions via the **Quick Start** card. The card auto-collapses when a stream starts successfully and can be tapped to expand again. Its collapsed state is persisted in the device Keychain.
 
 ## Component structure
