@@ -1,21 +1,49 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-const StatusIndicator = ({ connected, clientStatus }) => {
+const StatusIndicator = ({ connected, statusMessage }) => {
   return (
     <View style={styles.container}>
-      <View style={[
-        styles.circle,
-        { backgroundColor: connected ? '#4CAF50' : '#F44336' }
-      ]} />
-      <Text>{connected ? 'Conectado al PC' : 'Desconectado'}</Text>
+      <View
+        style={[
+          styles.circle,
+          { backgroundColor: connected ? '#4F6F52' : '#C5612D' },
+        ]}
+      />
+      <View style={styles.textWrap}>
+        <Text style={styles.label}>
+          {connected ? 'Connected to desktop' : 'Not connected'}
+        </Text>
+        <Text style={styles.message}>{statusMessage}</Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', margin: 20 },
-  circle: { width: 15, height: 15, borderRadius: 10, marginRight: 10 }
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  circle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 12,
+    marginTop: 4,
+  },
+  textWrap: {
+    flex: 1,
+  },
+  label: {
+    color: '#113946',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  message: {
+    color: '#5B7083',
+    lineHeight: 20,
+  },
 });
 
 export default StatusIndicator;

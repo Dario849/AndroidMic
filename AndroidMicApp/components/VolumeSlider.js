@@ -1,28 +1,46 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 const VolumeBar = ({ volume }) => {
-  const widthPercentage = (volume / 255) * 100;
+  const widthPercentage = Math.max(0, Math.min(100, volume));
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.bar, { width: `${widthPercentage}%` }]} />
+    <View>
+      <View style={styles.header}>
+        <Text style={styles.label}>Input level</Text>
+        <Text style={styles.value}>{widthPercentage}%</Text>
+      </View>
+      <View style={styles.container}>
+        <View style={[styles.bar, { width: `${widthPercentage}%` }]} />
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  label: {
+    color: '#113946',
+    fontWeight: '600',
+  },
+  value: {
+    color: '#5B7083',
+  },
   container: {
-    width: '80%',
+    width: '100%',
     height: 20,
     backgroundColor: '#E0E0E0',
     borderRadius: 10,
     overflow: 'hidden',
-    marginVertical: 20,
+    marginVertical: 12,
   },
   bar: {
     height: '100%',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#4F6F52',
   },
 });
 

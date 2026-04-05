@@ -1,5 +1,5 @@
 {
-  "name": "AndroidMicApp",
+  "name": "androidmicapp",
   "version": "0.0.1",
   "private": true,
   "packageManager": "pnpm@10.17.1",
@@ -10,7 +10,9 @@
     "start": "react-native start",
     "test": "jest",
     "deps:check-lockfiles": "node -e \"const fs=require('fs');const bad=['package-lock.json','yarn.lock'];const found=bad.filter(f=>fs.existsSync(f));if(found.length){console.error('Remove non-pnpm lockfiles: '+found.join(', '));process.exit(1)}console.log('Lockfile policy OK');\"",
-    "deps:audit": "pnpm audit --prod"
+    "deps:audit": "pnpm audit --prod",
+    "build:android": "cd android && gradlew.bat :app:assembleRelease",
+    "setup:windows": "node ./scripts/buildAndroid.js"
   },
   "dependencies": {
     "@notifee/react-native": "^9.1.8",

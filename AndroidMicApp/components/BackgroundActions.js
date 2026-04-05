@@ -7,24 +7,23 @@ const activeTask = async (taskDataArguments) => {
     const { delay } = taskDataArguments;
 
     // This loop keeps the service alive.
-    // While this runs, your App.js 'LiveAudioStream.on' events will continue to fire.
-    await new Promise(async (resolve) => {
-        while (BackgroundService.isRunning()) {
-            await sleep(delay);
-        }
-    });
+    // While this runs, App.js LiveAudioStream.on events continue to fire.
+    while (BackgroundService.isRunning()) {
+        await sleep(delay);
+    }
 };
 
 // 2. Configuration
 const options = {
     taskName: 'MicStream_KeepAlive',
     taskTitle: 'Streaming Audio',
-    taskDesc: 'Microphone is active in background',
+    taskDesc: 'AndroidMic is sending microphone audio to the desktop receiver',
+    linkingURI: 'androidmic://',
     taskIcon: {
         name: 'ic_launcher',
         type: 'mipmap',
     },
-    color: '#ff00ff',
+    color: '#C5612D',
     parameters: {
         delay: 2000,
     },

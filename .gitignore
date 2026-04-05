@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 main.exe
+androidmic-service.exe
 
 # JS lockfile policy
 AndroidMicApp/package-lock.json
